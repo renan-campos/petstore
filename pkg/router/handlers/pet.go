@@ -10,45 +10,82 @@
 package handlers
 
 import (
+	"encoding/json"
+	"log"
 	"net/http"
+
+	"github.com/renan-campos/petstore/pkg/router/handlers/models"
 )
+
+var pets []models.Pet
 
 func AddPet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-}
 
-func DeletePet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-}
+	var rawPet []byte
+	_, err := r.Body.Read(rawPet)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error reading json: %v", err)
+		return
+	}
 
-func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-}
+	var pet models.Pet
+	if err := json.Unmarshal(rawPet, &pet); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error unmarshalling json: %v", err)
+		return
+	}
 
-func FindPetsByTags(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	pet.Id = int64(len(pets))
+	pets = append(pets, pet)
+
+	outPet, err := json.Marshal(pet)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error marshalling pet: %v", err)
+		return
+	}
+
+	if _, err := w.Write(outPet); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error writing response body: %v", err)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
 func GetPetById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func DeletePet(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+func FindPetsByTags(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusNotImplemented)
 }
 
 func UpdatePet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNotImplemented)
 }
 
 func UpdatePetWithForm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNotImplemented)
 }
 
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNotImplemented)
 }
