@@ -13,7 +13,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
+	"github.com/gorilla/mux"
 	"github.com/renan-campos/petstore/pkg/router/handlers/models"
 )
 
@@ -57,7 +59,33 @@ func AddPet(w http.ResponseWriter, r *http.Request) {
 
 func GetPetById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	urlVars := mux.Vars(r)
+	id, ok := urlVars["id"]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	idx, err := strconv.Atoi(id)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		log.Printf("error converting id: %v", err)
+		return
+	}
+	if idx < 0 || idx >= len(pets) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	pet := pets[idx]
+
+	outPet, err := json.Marshal(pet)
+	if _, err := w.Write(outPet); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error writing response body: %v", err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func DeletePet(w http.ResponseWriter, r *http.Request) {
