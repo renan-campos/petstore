@@ -10,8 +10,7 @@
 package models
 
 type Pet struct {
-
-	Id int64 `json:"id,omitempty"`
+	Id int64 `json:"id"`
 
 	Name string `json:"name"`
 

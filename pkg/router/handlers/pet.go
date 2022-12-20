@@ -11,6 +11,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,13 +20,15 @@ import (
 	"github.com/renan-campos/petstore/pkg/router/handlers/models"
 )
 
+// Service Code Start
 var pets []models.Pet
+
+// Service Code End
 
 func AddPet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	var rawPet []byte
-	_, err := r.Body.Read(rawPet)
+	rawPet, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("error reading json: %v", err)
@@ -39,8 +42,10 @@ func AddPet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Service Code Start
 	pet.Id = int64(len(pets))
 	pets = append(pets, pet)
+	// Service Code End
 
 	outPet, err := json.Marshal(pet)
 	if err != nil {
@@ -54,19 +59,19 @@ func AddPet(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error writing response body: %v", err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func GetPetById(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
 	urlVars := mux.Vars(r)
-	id, ok := urlVars["id"]
+	id, ok := urlVars["petId"]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
+	// Service Code Start
 	idx, err := strconv.Atoi(id)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -78,6 +83,7 @@ func GetPetById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pet := pets[idx]
+	// Service Code End
 
 	outPet, err := json.Marshal(pet)
 	if _, err := w.Write(outPet); err != nil {
@@ -85,7 +91,6 @@ func GetPetById(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error writing response body: %v", err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func DeletePet(w http.ResponseWriter, r *http.Request) {
