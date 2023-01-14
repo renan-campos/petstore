@@ -11,6 +11,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -21,7 +23,27 @@ import (
 )
 
 // Service Code Start
-var pets []models.Pet
+// For this exercise, I'm ignoring data persistence.
+type petID int64
+
+var localID petID
+
+func GeneratePetID() petID {
+	out := localID
+	localID += 1
+	return out
+}
+
+func strToPetID(strID string) (petID, error) {
+	intID, err := strconv.Atoi(strID)
+	if err != nil {
+		return 0, err
+	}
+	return petID(intID), nil
+}
+
+var PetNotFound = errors.New("pet not found")
+var pets map[petID]models.Pet = make(map[petID]models.Pet)
 
 // Service Code End
 
@@ -31,32 +53,39 @@ func AddPet(w http.ResponseWriter, r *http.Request) {
 	rawPet, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error reading json: %v", err)
+		log.Printf("error reading json: %v\n", err)
 		return
 	}
 
 	var pet models.Pet
 	if err := json.Unmarshal(rawPet, &pet); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error unmarshalling json: %v", err)
+		log.Printf("error unmarshalling json: %v\n", err)
 		return
 	}
 
-	// Service Code Start
-	pet.Id = int64(len(pets))
-	pets = append(pets, pet)
-	// Service Code End
+	serviceCode := func() error {
+		id := GeneratePetID()
+		pet.Id = int64(id)
+		pets[id] = pet
+		return nil
+	}
+	if err := serviceCode(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error in service: %v\n", err)
+		return
+	}
 
 	outPet, err := json.Marshal(pet)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error marshalling pet: %v", err)
+		log.Printf("error marshalling pet: %v\n", err)
 		return
 	}
 
 	if _, err := w.Write(outPet); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error writing response body: %v", err)
+		log.Printf("error writing response body: %v\n", err)
 		return
 	}
 }
@@ -67,35 +96,89 @@ func GetPetById(w http.ResponseWriter, r *http.Request) {
 	urlVars := mux.Vars(r)
 	id, ok := urlVars["petId"]
 	if !ok {
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Could not find id in url path\n")
 		return
 	}
 
 	// Service Code Start
-	idx, err := strconv.Atoi(id)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		log.Printf("error converting id: %v", err)
-		return
+	serviceGetById := func(id string) (models.Pet, error) {
+		var pet models.Pet
+		petID, err := strToPetID(id)
+		if err != nil {
+			return pet, fmt.Errorf("failed to convert pet id: %v", err)
+		}
+		pet, ok := pets[petID]
+		if !ok {
+			return pet, PetNotFound
+		}
+		return pet, nil
 	}
-	if idx < 0 || idx >= len(pets) {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	pet := pets[idx]
 	// Service Code End
+	pet, err := serviceGetById(id)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, PetNotFound):
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
 
 	outPet, err := json.Marshal(pet)
-	if _, err := w.Write(outPet); err != nil {
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error writing response body: %v", err)
+		log.Printf("failed to marshal pet: %v\n", err)
 		return
 	}
+	if _, err := w.Write(outPet); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to write pet: %v\n", err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	return
 }
 
 func DeletePet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	urlVars := mux.Vars(r)
+	id, ok := urlVars["petId"]
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("could not get petId parameter from call\n")
+		return
+	}
+
+	// Service Code Start
+	serviceDeleteById := func(id string) error {
+		petID, err := strToPetID(id)
+		if err != nil {
+			return fmt.Errorf("failed to convert id: %v")
+		}
+		if _, ok := pets[petID]; !ok {
+			return PetNotFound
+		}
+		delete(pets, petID)
+		return nil
+	}
+
+	err := serviceDeleteById(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, PetNotFound):
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("failed to delete pet: %v\n", err)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return
 }
 
 func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {

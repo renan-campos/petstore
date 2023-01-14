@@ -277,14 +277,6 @@ paths:
       description: delete a pet
       operationId: deletePet
       parameters:
-      - name: api_key
-        in: header
-        description: ""
-        required: false
-        style: simple
-        explode: false
-        schema:
-          type: string
       - name: petId
         in: path
         description: Pet id to delete
@@ -295,8 +287,10 @@ paths:
           type: integer
           format: int64
       responses:
-        "400":
-          description: Invalid pet value
+        "204":
+          description: Pet deleted successfully
+        "404":
+          description: Pet not found
       security:
       - petstore_auth:
         - write:pets
