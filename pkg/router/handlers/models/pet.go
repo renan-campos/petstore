@@ -9,6 +9,14 @@
  */
 package models
 
+type PetStatus string
+
+var (
+	PetStatusAvailable PetStatus = "available"
+	PetStatusPending   PetStatus = "pending"
+	PetStatusSold                = "sold"
+)
+
 type Pet struct {
 	Id int64 `json:"id"`
 
@@ -20,5 +28,5 @@ type Pet struct {
 
 	Tags []Tag `json:"tags,omitempty"`
 	// pet status in the store
-	Status string `json:"status,omitempty"`
+	Status PetStatus `json:"status,omitempty"`
 }

@@ -138,7 +138,6 @@ func GetPetById(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failed to write pet: %v\n", err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	return
 }
 
@@ -183,7 +182,42 @@ func DeletePet(w http.ResponseWriter, r *http.Request) {
 
 func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Could not find status in url path\n")
+		return
+	}
+
+	serviceFindPetsByStatus := func(status string) []models.Pet {
+		var matchedPets []models.Pet
+		for _, pet := range pets {
+			if pet.Status == models.PetStatus(status) {
+				matchedPets = append(matchedPets, pet)
+			}
+		}
+		return matchedPets
+	}
+	matchedPets := serviceFindPetsByStatus(status)
+
+	if len(matchedPets) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	outPets, err := json.Marshal(matchedPets)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to marshal pets: %v\n", err)
+		return
+	}
+	if _, err := w.Write(outPets); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to write pets: %v\n", err)
+		return
+	}
+	return
 }
 
 func FindPetsByTags(w http.ResponseWriter, r *http.Request) {
