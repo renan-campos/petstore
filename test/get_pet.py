@@ -23,7 +23,7 @@ def test_create():
     try:
         response = requests.post(
                 url=petstore_url+pet_endpoint,
-                data=create_payload(pet_name)
+                data=payload
                 )
     except:
         return "Failed to connect to backend"
