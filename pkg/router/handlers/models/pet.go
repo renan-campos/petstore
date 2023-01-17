@@ -9,12 +9,15 @@
  */
 package models
 
+import "fmt"
+
 type PetStatus string
 
 var (
 	PetStatusAvailable PetStatus = "available"
 	PetStatusPending   PetStatus = "pending"
-	PetStatusSold                = "sold"
+	PetStatusSold      PetStatus = "sold"
+	PetStatusBlank     PetStatus = ""
 )
 
 type Pet struct {
@@ -29,4 +32,32 @@ type Pet struct {
 	Tags []Tag `json:"tags,omitempty"`
 	// pet status in the store
 	Status PetStatus `json:"status,omitempty"`
+}
+
+type ValidatedPet struct {
+	Pet
+	Violations []string `json:"violations,omitempty"`
+}
+
+func (p Pet) ValidationCondition(validPath func(ValidatedPet) error, invalidPath func(ValidatedPet) error) error {
+	validatedPet := p.validate()
+	if len(validatedPet.Violations) > 0 {
+		return invalidPath(validatedPet)
+	}
+	return validPath(validatedPet)
+}
+
+func (p Pet) validate() ValidatedPet {
+	var violations []string
+	// There's probably a cleaner way to check this...
+	switch p.Status {
+	case PetStatusAvailable, PetStatusPending, PetStatusSold, PetStatusBlank:
+		break
+	default:
+		violations = append(violations, fmt.Sprintf("%q is not a valid status", p.Status))
+	}
+	return ValidatedPet{
+		Pet:        p,
+		Violations: violations,
+	}
 }

@@ -43,7 +43,7 @@ func strToPetID(strID string) (petID, error) {
 }
 
 var PetNotFound = errors.New("pet not found")
-var pets map[petID]models.Pet = make(map[petID]models.Pet)
+var pets map[petID]models.ValidatedPet = make(map[petID]models.ValidatedPet)
 
 // Service Code End
 
@@ -64,28 +64,40 @@ func AddPet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceCode := func() error {
-		id := GeneratePetID()
-		pet.Id = int64(id)
-		pets[id] = pet
-		return nil
-	}
-	if err := serviceCode(); err != nil {
+	if err := pet.ValidationCondition(
+		func(validPet models.ValidatedPet) error {
+			serviceCode := func() error {
+				id := GeneratePetID()
+				validPet.Id = int64(id)
+				pets[id] = validPet
+				return nil
+			}
+			if err := serviceCode(); err != nil {
+				return fmt.Errorf("error occurred in service: %v", err)
+			}
+			outPet, err := json.Marshal(validPet)
+			if err != nil {
+				return fmt.Errorf("error marshalling pet: %v", err)
+			}
+			if _, err := w.Write(outPet); err != nil {
+				return fmt.Errorf("error writing response body: %v", err)
+			}
+			return nil
+		},
+		func(invalidPet models.ValidatedPet) error {
+			w.WriteHeader(http.StatusBadRequest)
+			violations, err := json.Marshal(invalidPet.Violations)
+			if err != nil {
+				return fmt.Errorf("error marshalling pet violations: %v", err)
+			}
+			if _, err := w.Write(violations); err != nil {
+				return fmt.Errorf("error writing response body: %v", err)
+			}
+			return nil
+		},
+	); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error in service: %v\n", err)
-		return
-	}
-
-	outPet, err := json.Marshal(pet)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error marshalling pet: %v\n", err)
-		return
-	}
-
-	if _, err := w.Write(outPet); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("error writing response body: %v\n", err)
+		log.Printf("error occurred in AddPet: %v\n", err)
 		return
 	}
 }
@@ -102,8 +114,8 @@ func GetPetById(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Service Code Start
-	serviceGetById := func(id string) (models.Pet, error) {
-		var pet models.Pet
+	serviceGetById := func(id string) (models.ValidatedPet, error) {
+		var pet models.ValidatedPet
 		petID, err := strToPetID(id)
 		if err != nil {
 			return pet, fmt.Errorf("failed to convert pet id: %v", err)
@@ -190,8 +202,8 @@ func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serviceFindPetsByStatus := func(status string) []models.Pet {
-		var matchedPets []models.Pet
+	serviceFindPetsByStatus := func(status string) []models.ValidatedPet {
+		var matchedPets []models.ValidatedPet
 		for _, pet := range pets {
 			if pet.Status == models.PetStatus(status) {
 				matchedPets = append(matchedPets, pet)
