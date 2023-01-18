@@ -8,9 +8,14 @@ import json
 petstore_url = "http://localhost:8080"
 pet_endpoint = "/api/v3/pet"
 find_by_status_endpoint = "/api/v3/pet/findByStatus?status="
+find_by_tags_endpoint = "/api/v3/pet/findByTags?"
 
-def create_payload(name, status=''):
-    return json.dumps({'name': name, 'status': status})
+def create_payload(name, status='', tags=[]):
+    return json.dumps({
+                'name': name, 
+                'status': status, 
+                'tags': [{'name':tag} for tag in tags],
+            })
 
 def test(description, func):
     error = func()
@@ -19,13 +24,14 @@ def test(description, func):
     return ""
 
 class Pet:
-    def __init__(self, name, status):
+    def __init__(self, name, status='', tags=[]):
         self.name = name
         self.status = status
+        self.tags = tags
     def create_payload(self):
-        return create_payload(self.name, self.status)
+        return create_payload(self.name, self.status, self.tags)
 
-def test_create_pets_with_status(pets):
+def test_create_pets_with_status_and_tags(pets):
     for pet in pets:
         try:
             response = requests.post(
@@ -43,54 +49,84 @@ def test_create_pets_with_status(pets):
             return f"Expected pet name: {pet.name} got: {created_pet['name']}"
         if (created_pet['status'] != pet.status):
             return f"Expected pet status: {pet.status} got: {created_pet['status']}"
+        if (len(pet.tags) > 0 and len(created_pet['tags']) != len(pet.tags)):
+            return f"Expected {created_pet['tags']} to equal {pet.tags}"
     return ""
 
 def gen_create_pets_test(pets):
-    return lambda: test_create_pets_with_status(pets)
+    return lambda: test_create_pets_with_status_and_tags(pets)
 
 def test_find_pets_with_status(pets, status):
     pets_with_status = [pet for pet in pets if pet.status == status]
     pet_names = [pet.name for pet in pets_with_status]
-    for pet in pets:
+    try:
+        response = requests.get(
+                url=f"{petstore_url}{find_by_status_endpoint}{status}"
+                )
+    except:
+        return "Failed to connect to backend"
+    if len(pets_with_status) == 0:
+        if (response.status_code != 204):
+            return f"Expected 204 status code. Got {response.status_code}"
+    else:
+        if (response.status_code != 200):
+            return f"Expected 200 status code. Got {response.status_code}"
         try:
-            response = requests.get(
-                    url=f"{petstore_url}{find_by_status_endpoint}{status}"
-                    )
-        except:
-            return "Failed to connect to backend"
-        if len(pets_with_status) == 0:
-            if (response.status_code != 204):
-                return f"Expected 204 status code. Got {response.status_code}"
-        else:
-            if (response.status_code != 200):
-                return f"Expected 200 status code. Got {response.status_code}"
-            try:
-                returned_pets = response.json()
-            except json.decoder.JSONDecodeError:
-                return f"Failed to decode json {response}"
-            if (len(returned_pets) != len(pet_names)):
-                return f"The number of returned pets ({len(returned_pets)}) and expected pets ({len(pet_names)}) does not match"
-            for returned_pet in returned_pets:
-                if (not returned_pet['name'] in pet_names):
-                    return f"Unexpected pet: {returned_pet['name']}"
-        return ""
-
+            returned_pets = response.json()
+        except json.decoder.JSONDecodeError:
+            return f"Failed to decode json {response}"
+        if (len(returned_pets) != len(pet_names)):
+            return f"The number of returned pets ({len(returned_pets)}) and expected pets ({len(pet_names)}) does not match"
+        for returned_pet in returned_pets:
+            if (not returned_pet['name'] in pet_names):
+                return f"Unexpected pet: {returned_pet['name']}"
+    return ""
 
 def gen_find_pets_with_status_test(pets, status):
     return lambda: test_find_pets_with_status(pets, status)
 
+def test_find_pets_with_tag(pets, tag):
+    pets_with_tag = [pet for pet in pets if tag in pet.tags]
+    pet_names = [pet.name for pet in pets_with_tag]
+    try:
+        response = requests.get(
+                url=f"{petstore_url}{find_by_tags_endpoint}{tag}",
+                )
+    except:
+        return "Failed to connect to backend"
+    if len(pets_with_tag) == 0:
+        if (response.status_code != 204):
+            return f"Expected 204 status code. Got {response.status_code}"
+        return ""
+    if (response.status_code != 200):
+        return f"Expected http status code {response.status_code} to equal 200"
+    try:
+        returned_pets = response.json()
+    except json.decoder.JSONDecodeError:
+        return f"Failed to decode json {response}"
+    if (len(returned_pets) != len(pet_names)):
+        return f"The number of returned pets ({len(returned_pets)}) and expected pets ({len(pet_names)}) does not match"
+    for returned_pet in returned_pets:
+        if (not returned_pet['name'] in pet_names):
+            return f"Unexpected pet: {returned_pet['name']}"
+    return ""
+
+def gen_find_pets_with_tags_test(pets, tag):
+    return lambda: test_find_pets_with_tag(pets, tag)
+
 if __name__ == '__main__':
     pets = [
-            Pet('Brady', 'pending'),
-            Pet('Trickywoo', 'pending'),
-            Pet('Marybell', 'pending'),
-            Pet('Echo', 'sold'),
+            Pet('Brady', 'pending', ['afc-certified', 'backend_expert', 'good_boy']),
+            Pet('Trickywoo', 'pending', ['afc-certified', 'backend_expert']),
+            Pet('Marybell', 'pending', ['backend_expert']),
+            Pet('Echo', 'sold', []),
             ]
     tests = [
-            test("Creating pets with status", gen_create_pets_test(pets)),
+            test("Creating pets with status and tags", gen_create_pets_test(pets)),
             test("Finding pets with status pending", gen_find_pets_with_status_test(pets, 'pending')),
             test("Finding pets with status sold", gen_find_pets_with_status_test(pets, 'sold')),
             test("Finding pets with invalid status", gen_find_pets_with_status_test(pets, 'foobar')),
+            test("Finding pets with tags", gen_find_pets_with_tags_test(pets, 'afc-certified')),
             ]
     tests_passed = True
     for test_error in tests:
