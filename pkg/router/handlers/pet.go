@@ -17,6 +17,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/renan-campos/petstore/pkg/router/handlers/models"
@@ -195,23 +196,29 @@ func DeletePet(w http.ResponseWriter, r *http.Request) {
 func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 
-	status := r.URL.Query().Get("status")
-	if status == "" {
-		w.WriteHeader(http.StatusInternalServerError)
+	extractSatusFromRequest := func(r *http.Request) []string {
+		return strings.Split(r.URL.Query().Get("status"), ",")
+	}
+	statusList := extractSatusFromRequest(r)
+	if len(statusList) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("Could not find status in url path\n")
 		return
 	}
 
-	serviceFindPetsByStatus := func(status string) []models.ValidatedPet {
+	serviceFindPetsByStatus := func(statusList []string) []models.ValidatedPet {
 		var matchedPets []models.ValidatedPet
 		for _, pet := range pets {
-			if pet.Status == models.PetStatus(status) {
-				matchedPets = append(matchedPets, pet)
+			for _, status := range statusList {
+				if pet.Status == models.PetStatus(status) {
+					matchedPets = append(matchedPets, pet)
+					break
+				}
 			}
 		}
 		return matchedPets
 	}
-	matchedPets := serviceFindPetsByStatus(status)
+	matchedPets := serviceFindPetsByStatus(statusList)
 
 	if len(matchedPets) == 0 {
 		w.WriteHeader(http.StatusNoContent)
@@ -234,7 +241,83 @@ func FindPetsByStatus(w http.ResponseWriter, r *http.Request) {
 
 func FindPetsByTags(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	extractTagsFromRequest := func(r *http.Request) []string {
+		return strings.Split(r.URL.Query().Get("tags"), ",")
+	}
+	tags := extractTagsFromRequest(r)
+	if len(tags) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Printf("Could not find tags in url path\n")
+	}
+
+	serviceFindPetsByTags := func(tags []string) []models.ValidatedPet {
+		// A recursive approach
+		// Start with all the pets, then whittle it down by filtering by tags.
+		getAllPets := func() []models.ValidatedPet {
+			var allPets = make([]models.ValidatedPet, len(pets))
+			var petIdx int
+			for petKey := range pets {
+				allPets[petIdx] = pets[petKey]
+				petIdx++
+			}
+			return allPets
+		}
+		filterByTag := func(pets []models.ValidatedPet, tag string) []models.ValidatedPet {
+			var matchedPets []models.ValidatedPet
+			for _, pet := range pets {
+				for _, petTag := range pet.Tags {
+					if petTag.Name == tag {
+						matchedPets = append(matchedPets, pet)
+					}
+				}
+			}
+			return matchedPets
+		}
+		matchedPets := getAllPets()
+		for _, tag := range tags {
+			matchedPets = filterByTag(matchedPets, tag)
+		}
+		return matchedPets
+		// An iterative approach
+		//var matchedPets []models.ValidatedPet
+		//for _, pet := range pets {
+		//	var matchedPet bool = true
+		//	var petTags = make(map[string]struct{})
+		//	for _, petTag := range pet.Tags {
+		//		petTags[petTag.Name] = struct{}{}
+		//	}
+		//	for _, tag := range tags {
+		//		if _, ok := petTags[tag]; !ok {
+		//			matchedPet = false
+		//			break
+		//		}
+		//	}
+		//	if matchedPet {
+		//		matchedPets = append(matchedPets, pet)
+		//	}
+		//}
+		//return matchedPets
+	}
+	matchedPets := serviceFindPetsByTags(tags)
+
+	if len(matchedPets) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	outPets, err := json.Marshal(matchedPets)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to marshal pets: %v\n", err)
+		return
+	}
+	if _, err := w.Write(outPets); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to write pets: %v\n", err)
+		return
+	}
+	return
 }
 
 func UpdatePet(w http.ResponseWriter, r *http.Request) {
