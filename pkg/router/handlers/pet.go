@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -320,12 +321,77 @@ func FindPetsByTags(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func UpdatePet(w http.ResponseWriter, r *http.Request) {
+func UpdatePetWithForm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	urlVars := mux.Vars(r)
+	petID, ok := urlVars["petId"]
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Could not find id in url path\n")
+		return
+	}
+
+	qValues := r.URL.Query()
+
+	// Service Code
+	updateFromValues := func(id string, qValues url.Values) error {
+
+		petID, err := strToPetID(id)
+		if err != nil {
+			return fmt.Errorf("failed to convert pet id: %v", err)
+		}
+		originalPet, has := pets[petID]
+		if !has {
+			return fmt.Errorf("Pet with ID %q not found", petID)
+		}
+
+		var updatedPet models.Pet
+		updatedPet = originalPet.Pet
+		if qValues.Has("name") {
+			updatedPet.Name = qValues.Get("name")
+		}
+		if qValues.Has("status") {
+			updatedPet.Status = models.PetStatus(qValues.Get("status"))
+		}
+		return updatedPet.ValidationCondition(
+			func(validPet models.ValidatedPet) error {
+				savePet := func() error {
+					pets[petID] = validPet
+					return nil
+				}
+				if err := savePet(); err != nil {
+					return fmt.Errorf("failed to save updated pet: %v", err)
+				}
+				outPet, err := json.Marshal(validPet)
+				if err != nil {
+					return fmt.Errorf("error marshalling pet: %v", err)
+				}
+				if _, err := w.Write(outPet); err != nil {
+					return fmt.Errorf("error writing response body: %v", err)
+				}
+				return nil
+			},
+			func(invalidPet models.ValidatedPet) error {
+				w.WriteHeader(http.StatusBadRequest)
+				violations, err := json.Marshal(invalidPet.Violations)
+				if err != nil {
+					return fmt.Errorf("error marshalling pet violations: %v", err)
+				}
+				if _, err := w.Write(violations); err != nil {
+					return fmt.Errorf("error writing response body: %v", err)
+				}
+				return nil
+			})
+	}
+	if err := updateFromValues(petID, qValues); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error occurred while updating pet: %v\n", err)
+		return
+	}
 }
 
-func UpdatePetWithForm(w http.ResponseWriter, r *http.Request) {
+func UpdatePet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusNotImplemented)
 }
