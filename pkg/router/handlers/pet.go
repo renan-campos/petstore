@@ -10,6 +10,7 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -398,5 +400,49 @@ func UpdatePet(w http.ResponseWriter, r *http.Request) {
 
 func UploadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusNotImplemented)
+
+	if err := writeFile("/tmp/photo.png", r.Body); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("error writing photo file: %v\n", err)
+		return
+	}
+
+	checksum, err := generateChecksum("/tmp/photo.png")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to generate checksum: %v\n", err)
+		return
+	}
+
+	if _, err := fmt.Fprintf(w, "%x", checksum); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to write response: %v\n", err)
+		return
+	}
+}
+
+func writeFile(name string, data io.Reader) error {
+	f, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, data)
+	return err
+}
+
+func generateChecksum(fileName string) ([]byte, error) {
+	var out []byte
+	f, err := os.Open(fileName)
+	if err != nil {
+		return out, err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return out, err
+	}
+	return h.Sum(nil), nil
 }
